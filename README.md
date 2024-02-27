@@ -1,5 +1,5 @@
 DESCRIPTION
-blue, a programming language in make (will replace all other languages in future 
+- blue, a programming language in make (will replace all other languages in future 😸)
 - inspired from pixeled
 - written in c++
 
