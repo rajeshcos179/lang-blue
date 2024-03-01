@@ -54,17 +54,19 @@ struct NodeBinExprMod
     NodeExpr *rhs;
 };
 
-// Binary expressions
+// Binary expressions consists of two expressions
 struct NodeBinExpr
 {
     std::variant<NodeBinExprAdd *, NodeBinExprMul *, NodeBinExprSub *, NodeBinExprDiv *, NodeBinExprMod *> var;
 };
 
+// Term can be an integer literal, an identifier or an expression
 struct NodeTerm
 {
     std::variant<NodeTermIntLit *, NodeTermIdent *, NodeTermParen *> var;
 };
 
+// Expression can be a term or binary expression
 struct NodeExpr
 {
     std::variant<NodeTerm *, NodeBinExpr *> var;
@@ -90,6 +92,7 @@ struct NodeScope
 
 struct NodeIfPred;
 
+// 
 struct NodeIfPredElif
 {
     NodeExpr *expr{};
@@ -102,11 +105,13 @@ struct NodeIfPredElse
     NodeScope *scope;
 };
 
+// if statment can be followed by an else or elif statment
 struct NodeIfPred
 {
     std::variant<NodeIfPredElif *, NodeIfPredElse *> var;
 };
 
+// if statement has an expression, scope and an optional else or elif
 struct NodeStmtIf
 {
     struct NodeExpr *expr{};
@@ -120,7 +125,7 @@ struct NodeStmtAssign
     NodeExpr *expr{};
 };
 
-// statement
+// statements available now
 struct NodeStmt
 {
     std::variant<NodeStmtExit *, NodeStmtLet *, NodeScope *, NodeStmtIf *, NodeStmtAssign *> var;
