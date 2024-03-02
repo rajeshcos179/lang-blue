@@ -21,6 +21,8 @@ enum class TokenType
     _if,
     _else,
     elif,
+    print,
+    function,
 };
 
 // converting tokens to strings to indicate errors
@@ -64,6 +66,10 @@ inline std::string to_string(const TokenType type)
         return "`else`";
     case TokenType::elif:
         return "`elif`";
+    case TokenType::print:
+        return "`print`";
+    case TokenType::function:
+        return "`function`";
     default:
         assert(false);
     }
@@ -139,6 +145,14 @@ public:
                 else if (buf == "elif")
                 {
                     tokens.push_back({TokenType::elif, line_count});
+                }
+                else if (buf == "print")
+                {
+                    tokens.push_back({TokenType::print, line_count});
+                }
+                else if (buf == "function")
+                {
+                    tokens.push_back({TokenType::function, line_count});
                 }
                 else
                 {

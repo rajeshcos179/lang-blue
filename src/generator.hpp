@@ -139,10 +139,10 @@ public:
     void gen_scope(const NodeScope *scope)
     {
         // start the scope (resolve conflict b/w global and local variables) , generate statments, end the scope (delete local variables)
-        begin_scope(); 
+        begin_scope();
         for (const NodeStmt *stmt : scope->stmts)
         {
-            gen_stmt(stmt); 
+            gen_stmt(stmt);
         }
         end_scope();
     }
@@ -155,7 +155,7 @@ public:
             const std::string &end_label;
             void operator()(const NodeIfPredElif *if_pred_elif) const
             {
-                gen.gen_expr(if_pred_elif->expr);//generate expression for elif and now is at top of stack
+                gen.gen_expr(if_pred_elif->expr);       // generate expression for elif and now is at top of stack
                 std::string label = gen.create_label(); // same procedure as of if stmt
                 gen.pop("rax");
                 gen.m_output << "    test rax, rax\n";
@@ -165,7 +165,7 @@ public:
                 gen.m_output << label << ":\n";
                 if (if_pred_elif->pred.has_value()) // if elif is followed by other elif or else, generate it
                 {
-                    gen.gen_if_pred(if_pred_elif->pred.value(), end_label); 
+                    gen.gen_if_pred(if_pred_elif->pred.value(), end_label);
                 }
             }
             void operator()(const NodeIfPredElse *if_pred_else) const
@@ -205,7 +205,7 @@ public:
                     exit(EXIT_FAILURE);
                 }
                 // storing the name of the identifier and its location in stack (currently top) in m_vars
-                gen.m_vars.push_back({.name = stmt_let->ident.value.value(), .stack_loc = gen.m_stack_size});
+                gen.m_vars.push_back({.name = stmt_let->ident.value.value(), .stack_loc = gen.m_stack_size, .byte_size = 4});
             }
             void operator()(const NodeScope *scope) const
             {
@@ -238,17 +238,55 @@ public:
             }
             void operator()(const NodeStmtAssign *stmt_assign) const
             {
-                gen.gen_expr(stmt_assign->expr);    // generate the expression to be assigned and is now at the top of stack
+                gen.gen_expr(stmt_assign->expr); // generate the expression to be assigned and is now at the top of stack
                 // search for the identifier in reverse order to find the identifier in local scope and then global scope
-                auto it = std::find_if(gen.m_vars.rbegin(), gen.m_vars.rend(), [&](const Var &var) 
+                auto it = std::find_if(gen.m_vars.rbegin(), gen.m_vars.rend(), [&](const Var &var)
                                        { return var.name == stmt_assign->ident.value.value(); });
                 if (it == gen.m_vars.rend())
                 {
                     std::cerr << "Undeclared identifier: " << stmt_assign->ident.value.value() << std::endl;
                     exit(EXIT_FAILURE);
                 }
-                gen.pop("rax"); // store the expression at rax
+                gen.pop("rax");                                                                            // store the expression at rax
                 gen.m_output << "    mov [rsp + " << (gen.m_stack_size - it->stack_loc) * 8 << "], rax\n"; // find the location of the identifier at stack and store the expression at rax into it
+            }
+            void operator()(const NodeFunction *function) const
+            {
+                auto function_label = gen.create_label();
+                gen.m_output << "    jmp " << function_label << "\n";
+                gen.m_output << function->function_name->ident.value.value() << ":\n";
+                gen.gen_scope(function->scope);
+                gen.m_output << "    ret\n";
+                gen.m_output << function_label << ":\n";
+            }
+            void operator()(const NodeFunctionCall *function_call) const
+            {
+                gen.m_output << "    call " << function_call->function_name->ident.value.value() << "\n";
+            }
+            void operator()(const NodeStmtPrint *stmt_print) const
+            {
+                gen.gen_expr(stmt_print->expr);
+                gen.pop("rax");
+                gen.m_output << "    mov edi, buffer + 15\n";
+                gen.m_output << "    mov dword [edi], 0x0A\n";
+                gen.m_output << "convert:\n";
+                gen.m_output << "    dec edi\n";
+                gen.m_output << "    xor edx, edx\n";
+                gen.m_output << "    mov ecx, 10\n";
+                gen.m_output << "    div ecx\n";
+                gen.m_output << "    add dl, '0'\n";
+                gen.m_output << "    mov [edi], dl\n";
+                gen.m_output << "    test eax, eax\n";
+                gen.m_output << "    jnz convert\n";
+
+                gen.m_output << "    mov eax, 4\n";
+                gen.m_output << "    mov ebx, 1\n";
+                gen.m_output << "    lea ecx, [edi]\n";
+                gen.m_output << "    mov edx, buffer\n";
+                gen.m_output << "    sub edx, ecx\n";
+                gen.m_output << "    int 0x80\n";
+                gen.m_bss << "section .bss\n";
+                gen.m_bss << "    buffer resd 1\n";
             }
         };
         StmtVisitor visitor{.gen = *this};
@@ -259,18 +297,19 @@ public:
     {
         m_output << "global _start\n_start:\n"; //_start or main of the program
         for (const NodeStmt *stmt : m_prog.stmts)
-        {   
-            gen_stmt(stmt);//generate each statement
+        {
+            gen_stmt(stmt); // generate each statement
         }
         // implicit exit with 0 after successful completion of program
         m_output << "    mov rax, 60\n";
         m_output << "    mov rdi, 0\n";
         m_output << "    syscall\n";
+        m_output << m_bss.str();
         return m_output.str();
     }
 
 private:
-    //push register value to top of stack / pop top of stack to register and increment / decrement stack size for keeping track of identifiers
+    // push register value to top of stack / pop top of stack to register and increment / decrement stack size for keeping track of identifiers
     void push(const std::string &reg)
     {
         m_output << "    push " << reg << "\n";
@@ -315,6 +354,7 @@ private:
     {
         std::string name;
         size_t stack_loc;
+        size_t byte_size;
     };
 
     const NodeProg m_prog;          // parsed tree
@@ -323,4 +363,5 @@ private:
     std::vector<Var> m_vars{};      // variables in program
     std::vector<size_t> m_scopes{}; // for local variables in a scope
     size_t label_count = 0;         // for creating distinct labels
+    std::stringstream m_bss;
 };

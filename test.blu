@@ -1,7 +1,6 @@
 let x = 3;
-let y = x - 5;
-let z = 4;
-    x = 6 * y;
-    exit(x);
-
-exit(y);
+function hello(){
+    print(5);
+    exit(4);
+}
+hello();

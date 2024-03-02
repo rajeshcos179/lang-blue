@@ -7,6 +7,12 @@
 #include "./arena.hpp"
 #include "./tokenization.hpp"
 
+enum class DataType{
+    _int,
+    _float,
+    _char,
+};
+
 struct NodeTermIntLit
 {
     Token int_lit;
@@ -79,6 +85,7 @@ struct NodeStmtExit
 
 struct NodeStmtLet
 {
+    DataType type;
     Token ident;
     NodeExpr *expr{};
 };
@@ -125,10 +132,26 @@ struct NodeStmtAssign
     NodeExpr *expr{};
 };
 
+struct NodeStmtPrint
+{
+    struct NodeExpr * expr{};
+};
+
+struct NodeFunction
+{
+    struct NodeTermIdent* function_name;
+    struct NodeScope* scope {};
+};
+
+struct NodeFunctionCall
+{
+    struct NodeTermIdent* function_name;
+};
+
 // statements available now
 struct NodeStmt
 {
-    std::variant<NodeStmtExit *, NodeStmtLet *, NodeScope *, NodeStmtIf *, NodeStmtAssign *> var;
+    std::variant<NodeStmtExit *, NodeStmtLet *, NodeScope *, NodeStmtIf *, NodeStmtAssign *, NodeStmtPrint *, NodeFunction*, NodeFunctionCall*> var;
 };
 
 struct NodeProg
@@ -335,8 +358,10 @@ public:
         if (try_consume(TokenType::let))
         {
             auto ident = try_consume_err(TokenType::ident);
-            auto stmt_let = m_allocator.emplace<NodeStmtLet>(ident);
+            auto stmt_let = m_allocator.alloc<NodeStmtLet>();
             try_consume_err(TokenType::eq);
+            stmt_let->ident = ident;
+            stmt_let->type = DataType::_int;
             if (auto expr = parse_expr())
             {
                 stmt_let->expr = expr.value();
@@ -401,10 +426,47 @@ public:
                 try_consume_err(TokenType::semi);
                 stmt->var = stmt_assign;
             }
+            else if(try_consume(TokenType::open_paren))
+            {
+                try_consume_err(TokenType::close_paren);
+                try_consume_err(TokenType::semi);
+                auto function_name = m_allocator.emplace<NodeTermIdent>(ident.value());
+                auto function_call = m_allocator.emplace<NodeFunctionCall>(function_name);
+                auto stmt = m_allocator.emplace<NodeStmt>(function_call);
+                return stmt;
+            }
             else
             {
                 error_expected("expression");
             }
+            return stmt;
+        }
+        if(try_consume(TokenType::print))
+        {
+            try_consume_err(TokenType::open_paren);
+            auto expr = parse_expr();
+            auto stmt_print = m_allocator.alloc<NodeStmtPrint>();
+            stmt_print->expr = expr.value();
+            try_consume_err(TokenType::close_paren);
+            try_consume_err(TokenType::semi);
+            auto stmt = m_allocator.emplace<NodeStmt>(stmt_print);
+            return stmt;
+        }
+        if(try_consume(TokenType::function))
+        {
+            auto ident = try_consume_err(TokenType::ident);
+            auto function_name = m_allocator.emplace<NodeTermIdent>(ident);
+            try_consume_err(TokenType::open_paren);
+            try_consume_err(TokenType::close_paren);
+            auto function = m_allocator.emplace<NodeFunction>(function_name);
+            if(auto scope = parse_scope())
+            {
+                function->scope = scope.value();
+            }
+            else{
+                error_expected("scope");
+            }
+            auto stmt = m_allocator.emplace<NodeStmt>(function);
             return stmt;
         }
         return {};
