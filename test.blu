@@ -1,6 +1,5 @@
-let x = 3;
-function hello(){
-    print(5);
-    exit(4);
+let x = 6;
+function hello(a,b)
+{
+    exit(x);
 }
-hello();

@@ -7,15 +7,26 @@
 #include "./arena.hpp"
 #include "./tokenization.hpp"
 
-enum class DataType{
+enum class DataType
+{
     _int,
-    _float,
     _char,
+    _float,
 };
 
 struct NodeTermIntLit
 {
     Token int_lit;
+};
+
+struct NodeTermCharLit
+{
+    Token char_lit;
+};
+
+struct NodeTermFloatLit
+{
+    Token float_lit;
 };
 
 struct NodeTermIdent
@@ -69,7 +80,7 @@ struct NodeBinExpr
 // Term can be an integer literal, an identifier or an expression
 struct NodeTerm
 {
-    std::variant<NodeTermIntLit *, NodeTermIdent *, NodeTermParen *> var;
+    std::variant<NodeTermIntLit *, NodeTermCharLit *, NodeTermFloatLit *, NodeTermIdent *, NodeTermParen *> var;
 };
 
 // Expression can be a term or binary expression
@@ -85,7 +96,6 @@ struct NodeStmtExit
 
 struct NodeStmtLet
 {
-    DataType type;
     Token ident;
     NodeExpr *expr{};
 };
@@ -99,7 +109,7 @@ struct NodeScope
 
 struct NodeIfPred;
 
-// 
+//
 struct NodeIfPredElif
 {
     NodeExpr *expr{};
@@ -134,24 +144,26 @@ struct NodeStmtAssign
 
 struct NodeStmtPrint
 {
-    struct NodeExpr * expr{};
+    struct NodeExpr *expr{};
 };
 
 struct NodeFunction
 {
-    struct NodeTermIdent* function_name;
-    struct NodeScope* scope {};
+    struct NodeTermIdent *function_name;
+    std::vector<NodeTermIdent *> parameters;
+    struct NodeScope *scope{};
 };
 
 struct NodeFunctionCall
 {
-    struct NodeTermIdent* function_name;
+    struct NodeTermIdent *function_name;
+    std::vector<NodeExpr *> arguments;
 };
 
 // statements available now
 struct NodeStmt
 {
-    std::variant<NodeStmtExit *, NodeStmtLet *, NodeScope *, NodeStmtIf *, NodeStmtAssign *, NodeStmtPrint *, NodeFunction*, NodeFunctionCall*> var;
+    std::variant<NodeStmtExit *, NodeStmtLet *, NodeScope *, NodeStmtIf *, NodeStmtAssign *, NodeStmtPrint *, NodeFunction *, NodeFunctionCall *> var;
 };
 
 struct NodeProg
@@ -182,6 +194,18 @@ public:
         {
             auto term_int_lit = m_allocator.emplace<NodeTermIntLit>(int_lit.value());
             auto term = m_allocator.emplace<NodeTerm>(term_int_lit);
+            return term;
+        }
+        if (auto char_lit = try_consume(TokenType::char_lit))
+        {
+            auto term_char_lit = m_allocator.emplace<NodeTermCharLit>(char_lit.value());
+            auto term = m_allocator.emplace<NodeTerm>(term_char_lit);
+            return term;
+        }
+        if (auto float_lit = try_consume(TokenType::float_lit))
+        {
+            auto term_float_lit = m_allocator.emplace<NodeTermFloatLit>(float_lit.value());
+            auto term = m_allocator.emplace<NodeTerm>(term_float_lit);
             return term;
         }
         if (auto ident = try_consume(TokenType::ident))
@@ -361,7 +385,6 @@ public:
             auto stmt_let = m_allocator.alloc<NodeStmtLet>();
             try_consume_err(TokenType::eq);
             stmt_let->ident = ident;
-            stmt_let->type = DataType::_int;
             if (auto expr = parse_expr())
             {
                 stmt_let->expr = expr.value();
@@ -426,12 +449,25 @@ public:
                 try_consume_err(TokenType::semi);
                 stmt->var = stmt_assign;
             }
-            else if(try_consume(TokenType::open_paren))
+            else if (try_consume(TokenType::open_paren))
             {
+                std::vector<NodeExpr *> arguments;
+                while (auto argument = parse_expr())
+                {
+                    arguments.push_back(argument.value());
+                    if (peek().has_value() && peek().value().type == TokenType::close_paren)
+                    {
+                        break;
+                    }
+                    else
+                    {
+                        try_consume_err(TokenType::comma);
+                    }
+                }
                 try_consume_err(TokenType::close_paren);
                 try_consume_err(TokenType::semi);
                 auto function_name = m_allocator.emplace<NodeTermIdent>(ident.value());
-                auto function_call = m_allocator.emplace<NodeFunctionCall>(function_name);
+                auto function_call = m_allocator.emplace<NodeFunctionCall>(function_name, arguments);
                 auto stmt = m_allocator.emplace<NodeStmt>(function_call);
                 return stmt;
             }
@@ -441,7 +477,7 @@ public:
             }
             return stmt;
         }
-        if(try_consume(TokenType::print))
+        if (try_consume(TokenType::print))
         {
             try_consume_err(TokenType::open_paren);
             auto expr = parse_expr();
@@ -452,18 +488,34 @@ public:
             auto stmt = m_allocator.emplace<NodeStmt>(stmt_print);
             return stmt;
         }
-        if(try_consume(TokenType::function))
+        if (try_consume(TokenType::function))
         {
             auto ident = try_consume_err(TokenType::ident);
             auto function_name = m_allocator.emplace<NodeTermIdent>(ident);
             try_consume_err(TokenType::open_paren);
+            std::vector<NodeTermIdent *> parameters;
+            while (auto ident = try_consume(TokenType::ident))
+            {
+                auto parameter = m_allocator.emplace<NodeTermIdent>(ident.value());
+                parameters.push_back(parameter);
+                if (peek().has_value() && peek().value().type == TokenType::close_paren)
+                {
+                    break;
+                }
+                else
+                {
+                    try_consume_err(TokenType::comma);
+                }
+            }
             try_consume_err(TokenType::close_paren);
-            auto function = m_allocator.emplace<NodeFunction>(function_name);
-            if(auto scope = parse_scope())
+
+            auto function = m_allocator.emplace<NodeFunction>(function_name, parameters);
+            if (auto scope = parse_scope())
             {
                 function->scope = scope.value();
             }
-            else{
+            else
+            {
                 error_expected("scope");
             }
             auto stmt = m_allocator.emplace<NodeStmt>(function);

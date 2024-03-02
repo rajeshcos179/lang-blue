@@ -23,6 +23,9 @@ enum class TokenType
     elif,
     print,
     function,
+    char_lit,
+    float_lit,
+    comma,
 };
 
 // converting tokens to strings to indicate errors
@@ -70,6 +73,12 @@ inline std::string to_string(const TokenType type)
         return "`print`";
     case TokenType::function:
         return "`function`";
+    case TokenType::char_lit:
+        return "char literal";
+    case TokenType::float_lit:
+        return "float literal";
+    case TokenType::comma:
+        return "`,`";
     default:
         assert(false);
     }
@@ -161,14 +170,33 @@ public:
                 buf.clear();
             }
             // integer literals
-            else if (std::isdigit(peek().value()))
+            else if (std::isdigit(peek().value()) || peek().value() == '.')
             {
-                buf.push_back(consume());
-                while (peek().has_value() && std::isdigit(peek().value()))
+                if(std::isdigit(peek().value()))
                 {
                     buf.push_back(consume());
+                    while (peek().has_value() && std::isdigit(peek().value()))
+                    {
+                        buf.push_back(consume());
+                    }
                 }
-                tokens.push_back({TokenType::int_lit, line_count, buf});
+                else
+                {
+                    buf.push_back('0');
+                }
+                if(peek().has_value() && peek().value() == '.')
+                {
+                    buf.push_back(consume());
+                    while (peek().has_value() && std::isdigit(peek().value()))
+                    {
+                        buf.push_back(consume());
+                    }
+                    tokens.push_back({TokenType::float_lit, line_count, buf});
+                }
+                else
+                {
+                    tokens.push_back({TokenType::int_lit, line_count, buf});
+                }
                 buf.clear();
             }
             // no tokens for space
@@ -262,6 +290,22 @@ public:
                 case '}':
                     consume();
                     tokens.push_back({TokenType::close_curly, line_count});
+                    break;
+                case '\'':
+                    consume();
+                    if(peek().has_value() && peek().value() == '\'')
+                    {
+                        tokens.push_back({TokenType::char_lit, line_count, ""});                    
+                    }
+                    else if(peek(1).has_value() && peek(1).value() == '\'')
+                    {
+                        tokens.push_back({TokenType::char_lit, line_count, std::to_string(consume())});
+                    }
+                    consume();
+                    break;
+                case ',':
+                    consume();
+                    tokens.push_back({TokenType::comma, line_count});
                     break;
                 case '\n':
                     consume();

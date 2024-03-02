@@ -10,7 +10,7 @@ class Generator
 {
 
 public:
-    // takes parsed tree as argumnent
+    // takes parsed tree as argument
     explicit Generator(NodeProg prog)
         : m_prog(std::move(prog))
     {
@@ -26,6 +26,22 @@ public:
                 // if a term is integer literal, move the value to rax register and push onto stack
                 gen.m_output << "    mov rax, " << term_int_lit->int_lit.value.value() << "\n";
                 gen.push("rax");
+                gen.m_var_byte_size = 4;
+            }
+
+            void operator()(const NodeTermCharLit *term_char_lit) const
+            {
+                gen.m_output << "    mov rax, " << term_char_lit->char_lit.value.value() << "\n";
+                gen.push("rax");
+                gen.m_var_byte_size = 1;
+            }
+
+            
+            void operator()(const NodeTermFloatLit *term_float_lit) const
+            {
+                gen.m_output << "    mov rax, " << term_float_lit->float_lit.value.value() << "\n";
+                gen.push("rax");
+                gen.m_var_byte_size = 8;
             }
 
             void operator()(const NodeTermIdent *term_ident) const
@@ -204,8 +220,10 @@ public:
                     std::cerr << "Identifier already used: " << stmt_let->ident.value.value() << std::endl;
                     exit(EXIT_FAILURE);
                 }
+
                 // storing the name of the identifier and its location in stack (currently top) in m_vars
-                gen.m_vars.push_back({.name = stmt_let->ident.value.value(), .stack_loc = gen.m_stack_size, .byte_size = 4});
+                gen.m_vars.push_back({.name = stmt_let->ident.value.value(), .stack_loc = gen.m_stack_size, .byte_size = gen.m_var_byte_size});
+                gen.m_var_byte_size = 0;
             }
             void operator()(const NodeScope *scope) const
             {
@@ -252,41 +270,45 @@ public:
             }
             void operator()(const NodeFunction *function) const
             {
-                auto function_label = gen.create_label();
-                gen.m_output << "    jmp " << function_label << "\n";
-                gen.m_output << function->function_name->ident.value.value() << ":\n";
-                gen.gen_scope(function->scope);
-                gen.m_output << "    ret\n";
-                gen.m_output << function_label << ":\n";
+                // auto function_label = gen.create_label();
+                // gen.m_output << "    jmp " << function_label << "\n";
+                // gen.m_output << function->function_name->ident.value.value() << ":\n";
+                // gen.gen_scope(function->scope);
+                // gen.m_output << "    ret\n";
+                // gen.m_output << function_label << ":\n";
+                assert(false);
             }
             void operator()(const NodeFunctionCall *function_call) const
             {
-                gen.m_output << "    call " << function_call->function_name->ident.value.value() << "\n";
+                assert(false);
+                // gen.m_output << "    call " << function_call->function_name->ident.value.value() << "\n";
+    
             }
             void operator()(const NodeStmtPrint *stmt_print) const
             {
                 gen.gen_expr(stmt_print->expr);
-                gen.pop("rax");
-                gen.m_output << "    mov edi, buffer + 15\n";
-                gen.m_output << "    mov dword [edi], 0x0A\n";
-                gen.m_output << "convert:\n";
-                gen.m_output << "    dec edi\n";
-                gen.m_output << "    xor edx, edx\n";
-                gen.m_output << "    mov ecx, 10\n";
-                gen.m_output << "    div ecx\n";
-                gen.m_output << "    add dl, '0'\n";
-                gen.m_output << "    mov [edi], dl\n";
-                gen.m_output << "    test eax, eax\n";
-                gen.m_output << "    jnz convert\n";
+                // gen.pop("rax");
+                // gen.m_output << "    mov edi, buffer + 15\n";
+                // gen.m_output << "    mov dword [edi], 0x0A\n";
+                // gen.m_output << "convert:\n";
+                // gen.m_output << "    dec edi\n";
+                // gen.m_output << "    xor edx, edx\n";
+                // gen.m_output << "    mov ecx, 10\n";
+                // gen.m_output << "    div ecx\n";
+                // gen.m_output << "    add dl, '0'\n";
+                // gen.m_output << "    mov [edi], dl\n";
+                // gen.m_output << "    test eax, eax\n";
+                // gen.m_output << "    jnz convert\n";
 
-                gen.m_output << "    mov eax, 4\n";
-                gen.m_output << "    mov ebx, 1\n";
-                gen.m_output << "    lea ecx, [edi]\n";
-                gen.m_output << "    mov edx, buffer\n";
-                gen.m_output << "    sub edx, ecx\n";
-                gen.m_output << "    int 0x80\n";
-                gen.m_bss << "section .bss\n";
-                gen.m_bss << "    buffer resd 1\n";
+                // gen.m_output << "    mov eax, 4\n";
+                // gen.m_output << "    mov ebx, 1\n";
+                // gen.m_output << "    lea ecx, [edi]\n";
+                // gen.m_output << "    mov edx, buffer\n";
+                // gen.m_output << "    sub edx, ecx\n";
+                // gen.m_output << "    int 0x80\n";
+                // gen.m_bss << "section .bss\n";
+                // gen.m_bss << "    buffer resd 1\n";
+                
             }
         };
         StmtVisitor visitor{.gen = *this};
@@ -364,4 +386,5 @@ private:
     std::vector<size_t> m_scopes{}; // for local variables in a scope
     size_t label_count = 0;         // for creating distinct labels
     std::stringstream m_bss;
+    size_t m_var_byte_size = 0;
 };
